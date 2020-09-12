@@ -1,3 +1,16 @@
+# lite-hearted
+
+lite-hearted is a small compatibility shim for the lite text editor that allows
+it to run in love2d. It is a quick-and-dirty experiment in embedding editing tools
+into a game engine, to allow for building smooth game development workflows. It's
+also literally a two-evening hack, so you will probably run into some rough edges!
+
+You can run it simply by cloning this repo and running `love .`. Due to the
+limitations of love2d's sandboxed filesystem, you can only edit files that are in
+the project itself. Given the goals of this project, this should be fine.
+
+Original README follows:
+
 # lite
 ![screenshot](https://user-images.githubusercontent.com/3920290/81471642-6c165880-91ea-11ea-8cd1-fae7ae8f0bc4.png)
 
