@@ -416,7 +416,7 @@ function core.step()
 end
 
 
-local run_threads = coroutine.wrap(function()
+core.run_threads = coroutine.wrap(function()
   while true do
     local max_time = 1 / config.fps - 0.004
     local ran_any_threads = false
@@ -452,7 +452,7 @@ function core.run()
   while true do
     core.frame_start = system.get_time()
     local did_redraw = core.step()
-    run_threads()
+    core.run_threads()
     if not did_redraw and not system.window_has_focus() then
       system.wait_event(0.25)
     end

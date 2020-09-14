@@ -9,12 +9,11 @@ function renderer.get_size()
 end
 
 function renderer.begin_frame()
-    love.graphics.origin()
-    love.graphics.clear(love.graphics.getBackgroundColor())
+    -- handled in love.run
 end
 
 function renderer.end_frame()
-    love.graphics.present()
+    -- handled in love.run
 end
 
 function renderer.set_clip_rect(x, y, w, h)
@@ -22,12 +21,10 @@ function renderer.set_clip_rect(x, y, w, h)
 end
 
 function renderer.set_litecolor(color)
-    if not color or #color < 3 then color = { 255, 255, 255, 255 } end
-    local alpha = 1
-    if #color == 4 then
-        alpha = color[4] / 255
-    end
-    love.graphics.setColor(color[1] / 255, color[2] / 255, color[3] / 255, alpha)
+    local r, g, b, a = 255, 255, 255, 255
+    if color and #color >= 3 then r, g, b = unpack(color, 1, 3) end
+    if #color >= 4 then a = color[4] end
+    love.graphics.setColor(r / 255, g / 255, b / 255, a / 255)
 end
 function renderer.draw_rect(x, y, w, h, color)
     renderer.set_litecolor(color)
@@ -36,9 +33,9 @@ end
 
 function renderer.draw_text(font, text, x, y, color)
     renderer.set_litecolor(color)
-    local textobj = love.graphics.newText(font.font, text)
-    love.graphics.draw(textobj, x, y)
-    return x + textobj:getWidth()
+    love.graphics.setFont(font.font)
+    love.graphics.print(text, x, y)
+    return x + font.font:getWidth(text)
 end
 
 renderer.font = {}
@@ -59,7 +56,8 @@ function renderer.font.load(filename, size)
 end
 
 system = {}
-function system.poll_event()
+system.event_queue = {}
+function system.enqueue_love_event(ev, a, b, c, d, e, f)
     local function button_name(button)
         if button == 1 then return 'left' end
         if button == 2 then return 'right' end
@@ -76,29 +74,39 @@ function system.poll_event()
         end
         return key
     end
-    love.event.pump()
-    for ev, a, b, c, d, e, f in love.event.poll() do
+    local function convert_love_event()
         if ev == 'quit' then
-            return 'quit'
+            return {'quit'}
         elseif ev == 'resize' then
-            return 'resized', a, b
+            return {'resized', a, b}
         elseif ev == 'filedropped' then
-            return 'filedropped', a:getFilename(), love.mouse.getX(), love.mouse.getY()
+            return {'filedropped', a:getFilename(), love.mouse.getX(), love.mouse.getY()}
         elseif ev == 'keypressed' then
-            return 'keypressed', key_name(a or b)
+            return {'keypressed', key_name(a or b)}
         elseif ev == 'keyreleased' then
-            return 'keyreleased', key_name(a or b)
+            return {'keyreleased', key_name(a or b)}
         elseif ev == 'textinput' then
-            return 'textinput', a
+            return {'textinput', a}
         elseif ev == 'mousepressed' then
-            return 'mousepressed', button_name(c), a, b, e
+            return {'mousepressed', button_name(c), a, b, e}
         elseif ev == 'mousereleased' then
-            return 'mousereleased', button_name(c), a, b
+            return {'mousereleased', button_name(c), a, b}
         elseif ev == 'mousemoved' then
-            return 'mousemoved', a, b, c, d
+            return {'mousemoved', a, b, c, d}
         elseif ev == 'wheelmoved' then
-            return 'mousewheel', b
+            return {'mousewheel', b}
         end
+    end
+    local liteev = convert_love_event()
+    if liteev then
+        table.insert(system.event_queue, liteev)
+    end
+end
+
+function system.poll_event()
+    local liteev = table.remove(system.event_queue, 1)
+    if liteev then
+        return unpack(liteev)
     end
 end
 
@@ -129,7 +137,7 @@ function system.window_has_focus()
 end
 
 function system.show_confirm_dialog(title, msg)
-    return love.window.showMessageBox(title, message, { 'Yes', 'No', escapebutton = 2 }, 'warning') == 1
+    return love.window.showMessageBox(title, msg, { 'Yes', 'No', escapebutton = 2 }, 'warning') == 1
 end
 
 function system.chdir(dir)
@@ -183,7 +191,6 @@ end
 function system.sleep(s)
     love.timer.sleep(s)
 end
-
 function system.exec(cmd)
     -- ehhhh todo I guess
 end
@@ -201,7 +208,7 @@ function system.fuzzy_match(str, ptn)
         if cstr:lower() == cptn:lower() then
             score = score + (run * 10)
             if cstr ~= cptn then score = score - 1 end
-            istr = istr + 1
+            run = run + 1
             iptn = iptn + 1
         else
             score = score - 10
@@ -210,10 +217,9 @@ function system.fuzzy_match(str, ptn)
         istr = istr + 1
     end
     if iptn > ptn:len() then
-        return score - str:len() + istr - 1
+        return score - str:len() - istr + 1
     end
 end
-
 table.unpack = unpack
 
 core = ""
@@ -230,5 +236,51 @@ function love.run()
     local style = require('core.style')
     style.code_font = renderer.font.load(EXEDIR .. "/data/fonts/monospace.ttf", 15 * SCALE)
     core.init()
-    return core.run
+
+    if love.load then love.load(love.arg.parseGameArguments(arg), arg) end
+
+    -- We don't want the first frame's dt to include time taken by love.load.
+    if love.timer then love.timer.step() end
+
+    local dt = 0
+    -- Main loop time.
+    return function()
+        -- Process events.
+        if love.event then
+            love.event.pump()
+            for name, a,b,c,d,e,f in love.event.poll() do
+                system.enqueue_love_event(name, a, b, c, d, e, f)
+                if name == "quit" then
+                    if not love.quit or not love.quit() then
+                        return a or 0
+                    end
+                end
+                love.handlers[name](a,b,c,d,e,f)
+            end
+        end
+
+        -- Update dt, as we'll be passing it to update
+        if love.timer then dt = love.timer.step() end
+
+        -- Call update and draw
+        if love.update then love.update(dt) end -- will pass 0 if love.timer is disabled
+
+        if love.graphics and love.graphics.isActive() then
+            love.graphics.origin()
+            love.graphics.clear(love.graphics.getBackgroundColor())
+
+            -- update lite & draw
+            core.redraw = true
+            core.frame_start = system.get_time()
+            core.step()
+            core.run_threads()
+
+            if love.draw then love.draw() end
+
+            love.graphics.present()
+        end
+
+        if love.timer then love.timer.sleep(0.001) end
+    end
 end
+
