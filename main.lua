@@ -149,6 +149,8 @@ function system.list_dir(path)
     local info = love.filesystem.getInfo(path)
     if info and info.type == 'directory' then
         return love.filesystem.getDirectoryItems(path)
+    elseif info and info.type == 'symlink' then
+        return love.filesystem.getDirectoryItems(path .. "/.")
     end
     return nil, "Not a directory"
 end
@@ -165,6 +167,12 @@ function system.get_file_info(path)
             type = 'file'
         elseif info.type == 'directory' then
             type = 'dir'
+        elseif info.type == 'symlink' then
+            if love.filesystem.read(path, 1) then
+                type = 'file'
+            else
+                type = 'dir'
+            end
         end
         return {
             modified = info.modtime,
@@ -222,17 +230,17 @@ function system.fuzzy_match(str, ptn)
 end
 table.unpack = unpack
 
-core = ""
+ARGS = love.arg.parseGameArguments(arg)
+VERSION = "1.11"
+PLATFORM = "love2d"
+SCALE = love.graphics.getDPIScale()
+EXEDIR = ""
+PATHSEP = package.config:sub(1, 1)
+-- love.filesystem.mount(love.filesystem.getSourceBaseDirectory(), love.filesystem.getSourceBaseDirectory())
+package.path = love.filesystem.getWorkingDirectory() .. '/data/?.lua;' .. love.filesystem.getWorkingDirectory() .. '/data/?/init.lua;' .. package.path
+
 function love.run()
-    ARGS = love.arg.parseGameArguments(arg)
-    VERSION = "1.11"
-    PLATFORM = "love2d"
-    SCALE = love.graphics.getDPIScale()
-    EXEDIR = ""
-    PATHSEP = package.config:sub(1, 1)
-    love.filesystem.mount(love.filesystem.getSourceBaseDirectory(), love.filesystem.getSourceBaseDirectory())
-    package.path = love.filesystem.getWorkingDirectory() .. '/data/?.lua;' .. love.filesystem.getWorkingDirectory() .. '/data/?/init.lua;' .. package.path
-    core = require('core')
+    local core = require('core')
     local style = require('core.style')
     style.code_font = renderer.font.load(EXEDIR .. "/data/fonts/monospace.ttf", 15 * SCALE)
     core.init()
