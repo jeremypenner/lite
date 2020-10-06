@@ -34,8 +34,11 @@ end
 function renderer.draw_text(font, text, x, y, color)
     renderer.set_litecolor(color)
     love.graphics.setFont(font.font)
-    love.graphics.print(text, x, y)
-    return x + font.font:getWidth(text)
+    if pcall(function() love.graphics.print(text, x, y) end) then
+      return x + font.font:getWidth(text)
+    else
+      return x
+    end
 end
 
 renderer.font = {}
